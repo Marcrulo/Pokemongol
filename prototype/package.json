@@ -1,0 +1,10 @@
+{
+  "name": "haunts-prototype",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Domain logic for Haunts. Runs on Node and imports unchanged into React Native.",
+  "scripts": {
+    "sim": "node simulate.js",
+    "test": "node --test test/"
+  }
+}

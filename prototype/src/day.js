@@ -1,0 +1,65 @@
+/**
+ * Collect a day: stays → catches.
+ *
+ * This is where the "one haunt per place per day" rule lives. It belongs here
+ * rather than in the dwell detector, which is correct as-is — it reports what
+ * the GPS trail actually says. Deduplication is a game rule, not a fix.
+ *
+ * Without it, GPS drift splits one long visit into two qualifying stays on
+ * roughly 26% of days, so a single 41-minute trip to the park yields two
+ * haunts.
+ *
+ * @typedef {import('./dwell.js').Stay} Stay
+ * @typedef {import('./spawner.js').Catch} Catch
+ */
+
+import { spawn } from './spawner.js';
+
+/** Two stays are the same place if they resolve to the same tag and name. */
+const placeKey = (place) => `${place.osmTag}|${place.placeName}`;
+
+/**
+ * Keep one stay per place — the longest, so the real visit wins over a
+ * drift-induced fragment.
+ *
+ * @param {Array<{stay: Stay, place: {osmTag: string, placeName: string}}>} resolved
+ * @returns {Array<{stay: Stay, place: {osmTag: string, placeName: string}}>}
+ *   in first-arrival order
+ */
+export function onePerPlace(resolved) {
+  /** @type {Map<string, {stay: Stay, place: any}>} */
+  const best = new Map();
+  for (const entry of resolved) {
+    const key = placeKey(entry.place);
+    const held = best.get(key);
+    if (!held || entry.stay.duration > held.stay.duration) best.set(key, entry);
+  }
+  return [...best.values()].sort((a, b) => a.stay.startT - b.stay.startT);
+}
+
+/**
+ * The full daily pipeline: resolve each stay to a place, apply one-per-place,
+ * then spawn.
+ *
+ * @param {Object} args
+ * @param {{random(): number, choice(items: number[]): number}} args.rng
+ * @param {Stay[]} args.stays
+ * @param {(lat: number, lon: number) => ({osmTag: string, placeName: string}|null)} args.resolve
+ * @param {number} args.steps
+ * @param {string} [args.weather]
+ * @returns {Catch[]}
+ */
+export function collectDay({ rng, stays, resolve, steps, weather = 'unknown' }) {
+  const resolved = [];
+  for (const stay of stays) {
+    const place = resolve(stay.lat, stay.lon);
+    if (place) resolved.push({ stay, place });
+  }
+
+  const catches = [];
+  for (const { stay, place } of onePerPlace(resolved)) {
+    const c = spawn(rng, stay, place.osmTag, place.placeName, steps, weather);
+    if (c) catches.push(c);
+  }
+  return catches;
+}
