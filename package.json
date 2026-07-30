@@ -1,0 +1,21 @@
+{
+  "name": "haunts",
+  "version": "0.1.0",
+  "main": "index.js",
+  "dependencies": {
+    "expo": "~57.0.9",
+    "expo-location": "~57.0.7",
+    "expo-sqlite": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "expo-task-manager": "~57.0.7",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "test": "cd prototype && node --test \"test/**/*.test.js\""
+  },
+  "private": true
+}

@@ -11,7 +11,7 @@ Design: [`../docs/superpowers/specs/2026-07-30-haunts-design.md`](../docs/superp
 ```sh
 node simulate.js              # simulate a day, print the evening review
 node simulate.js --verbose    # also show the GPS trail and which stays qualified
-node --test test/             # 38 tests
+node --test "test/**/*.test.js"   # 59 tests
 ```
 
 Flags: `--seed N`, `--steps N`, `--weather "..."`, `--day YYYY-MM-DD`.
