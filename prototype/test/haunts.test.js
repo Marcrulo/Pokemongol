@@ -11,8 +11,11 @@ import {
   BUDGETS, RARITIES, STAT_CAP, STAT_NAMES,
   rarityWeights, rollRarity, rollStats, spawn,
 } from '../src/spawner.js';
-import { CATALOG, TYPES, forTag } from '../src/species.js';
+import { CATALOG, forTag } from '../src/species.js';
 import { MemoryStore } from '../src/store.js';
+import {
+  KEY_FALLBACK, SIGNATURE_STAT, TAG_TO_TYPE, TYPES, signatureFor, typeForTag,
+} from '../src/types.js';
 
 const LAT = 55.9533;
 const LON = -3.1883;
@@ -42,6 +45,89 @@ describe('catalog', () => {
   it('looks up by tag', () => {
     assert.equal(forTag('shop=supermarket').id, 'aisle_seven');
     assert.equal(forTag('amenity=nightclub'), null); // not catalogued yet
+  });
+});
+
+describe('tag to type mapping', () => {
+  it('has exactly five types', () => {
+    assert.equal(TYPES.length, 5);
+    assert.deepEqual([...TYPES],
+      ['Occupations', 'Cultural', 'Forest', 'Water', 'Graveyard']);
+  });
+
+  it('gives every type one signature stat', () => {
+    for (const t of TYPES) assert.ok(STAT_NAMES.includes(signatureFor(t)), t);
+    assert.deepEqual(SIGNATURE_STAT, {
+      Occupations: 'Dread',
+      Cultural: 'Anchor',
+      Forest: 'Insight',
+      Water: 'Presence',
+      Graveyard: 'Power',
+    });
+  });
+
+  it('uses each stat as a signature exactly once', () => {
+    const used = TYPES.map(signatureFor);
+    assert.equal(new Set(used).size, STAT_NAMES.length);
+  });
+
+  it('maps every tag to a declared type', () => {
+    for (const [tag, type] of Object.entries(TAG_TO_TYPE)) {
+      assert.ok(TYPES.includes(type), `${tag} -> ${type}`);
+    }
+    for (const [key, type] of Object.entries(KEY_FALLBACK)) {
+      assert.ok(TYPES.includes(type), `${key} -> ${type}`);
+      assert.ok(key.endsWith('='), `${key} should end with '='`);
+    }
+  });
+
+  it('maps a useful number of tags', () => {
+    assert.ok(Object.keys(TAG_TO_TYPE).length > 100,
+      `only ${Object.keys(TAG_TO_TYPE).length} tags mapped`);
+  });
+
+  it('covers all five types with real tags', () => {
+    const perType = Object.fromEntries(TYPES.map((t) => [t, 0]));
+    for (const type of Object.values(TAG_TO_TYPE)) perType[type] += 1;
+    for (const t of TYPES) assert.ok(perType[t] >= 10, `${t}: only ${perType[t]} tags`);
+  });
+
+  it('classifies representative places correctly', () => {
+    assert.equal(typeForTag('shop=butcher'), 'Occupations');
+    assert.equal(typeForTag('amenity=pub'), 'Occupations');
+    assert.equal(typeForTag('historic=castle'), 'Cultural');
+    assert.equal(typeForTag('amenity=place_of_worship'), 'Cultural');
+    assert.equal(typeForTag('natural=wood'), 'Forest');
+    assert.equal(typeForTag('leisure=park'), 'Forest');
+    assert.equal(typeForTag('natural=beach'), 'Water');
+    assert.equal(typeForTag('waterway=river'), 'Water');
+    assert.equal(typeForTag('landuse=cemetery'), 'Graveyard');
+    assert.equal(typeForTag('amenity=crematorium'), 'Graveyard');
+  });
+
+  it('falls back on a tag key when there is no exact match', () => {
+    assert.equal(typeForTag('office=lawyer'), 'Occupations');   // via 'office='
+    assert.equal(typeForTag('craft=blacksmith'), 'Occupations'); // via 'craft='
+    assert.equal(typeForTag('waterway=oxbow'), 'Water');          // via 'waterway='
+  });
+
+  it('lets an exact tag beat its key fallback', () => {
+    // Everything historic= is Cultural, except the ones that hold the dead.
+    assert.equal(typeForTag('historic=monument'), 'Cultural');
+    assert.equal(typeForTag('historic=tomb'), 'Graveyard');
+    assert.equal(typeForTag('historic=mausoleum'), 'Graveyard');
+  });
+
+  it('returns null for anything unmapped', () => {
+    assert.equal(typeForTag('building=dormitory'), null);
+    assert.equal(typeForTag('nonsense'), null);
+    assert.equal(typeForTag(''), null);
+  });
+
+  it('derives every species type from the mapping', () => {
+    for (const s of CATALOG) {
+      assert.equal(s.type, typeForTag(s.osmTag), s.name);
+    }
   });
 });
 
@@ -113,9 +199,9 @@ describe('rarity', () => {
   it('improves with walking', () => {
     const lazy = rarityWeights(0);
     const keen = rarityWeights(20_000);
-    assert.ok(keen.Common < lazy.Common);
-    assert.ok(keen.Rare > lazy.Rare);
-    assert.ok(keen.Mythic > lazy.Mythic);
+    assert.ok(keen.Shade < lazy.Shade);
+    assert.ok(keen.Wraith > lazy.Wraith);
+    assert.ok(keen.Reaper > lazy.Reaper);
   });
 
   it('saturates at 20k steps', () => {
@@ -137,11 +223,11 @@ describe('rarity', () => {
     }
   });
 
-  it('is mostly Common on a lazy day', () => {
+  it('is mostly Shade on a lazy day', () => {
     const rng = makeRng(3);
     let common = 0;
-    for (let i = 0; i < 5_000; i++) if (rollRarity(rng, 0) === 'Common') common++;
-    assert.ok(common / 5_000 > 0.65);
+    for (let i = 0; i < 5_000; i++) if (rollRarity(rng, 0) === 'Shade') common++;
+    assert.ok(common / 5_000 > 0.50);
   });
 });
 
@@ -150,54 +236,100 @@ describe('stats', () => {
     const rng = makeRng(0);
     for (const [rarity, budget] of Object.entries(BUDGETS)) {
       for (let i = 0; i < 500; i++) {
-        const stats = rollStats(rng, budget);
+        const stats = rollStats(rng, budget, 'Power');
         const total = Object.values(stats).reduce((a, v) => a + v, 0);
         assert.equal(total, budget, rarity);
       }
     }
   });
 
-  it('has the six named axes', () => {
-    assert.deepEqual(Object.keys(rollStats(makeRng(0), 200)), [...STAT_NAMES]);
-    assert.equal(STAT_NAMES.length, 6);
+  it('has the five named axes', () => {
+    assert.deepEqual(Object.keys(rollStats(makeRng(0), 100, 'Power')), [...STAT_NAMES]);
+    assert.deepEqual([...STAT_NAMES],
+      ['Power', 'Dread', 'Anchor', 'Presence', 'Insight']);
   });
 
   it('keeps every value within bounds', () => {
     const rng = makeRng(0);
     for (let i = 0; i < 2_000; i++) {
-      for (const v of Object.values(rollStats(rng, 420))) {
+      for (const v of Object.values(rollStats(rng, 150, 'Power'))) {
         assert.ok(v >= 0 && v <= STAT_CAP, String(v));
         assert.ok(Number.isInteger(v), String(v));
       }
     }
   });
 
-  it('favours no axis', () => {
+  it('favours the signature stat, and only that one', () => {
     const rng = makeRng(0);
     const n = 20_000;
     const sums = Object.fromEntries(STAT_NAMES.map((k) => [k, 0]));
     for (let i = 0; i < n; i++) {
-      for (const [k, v] of Object.entries(rollStats(rng, 300))) sums[k] += v;
+      for (const [k, v] of Object.entries(rollStats(rng, 100, 'Insight'))) sums[k] += v;
     }
-    const means = STAT_NAMES.map((k) => sums[k] / n);
-    assert.ok(Math.max(...means) - Math.min(...means) < 2, JSON.stringify(means));
+    const means = Object.fromEntries(STAT_NAMES.map((k) => [k, sums[k] / n]));
+    const others = STAT_NAMES.filter((k) => k !== 'Insight').map((k) => means[k]);
+
+    // The signature stat clearly leads...
+    assert.ok(means.Insight > Math.max(...others) * 2,
+      `Insight ${means.Insight.toFixed(1)} vs others ${others.map((m) => m.toFixed(1))}`);
+    // ...and the other four are indistinguishable from each other.
+    assert.ok(Math.max(...others) - Math.min(...others) < 2, JSON.stringify(means));
+  });
+
+  it('gives every type its own signature', () => {
+    const rng = makeRng(7);
+    for (const type of TYPES) {
+      const signature = signatureFor(type);
+      const sums = Object.fromEntries(STAT_NAMES.map((k) => [k, 0]));
+      for (let i = 0; i < 3_000; i++) {
+        for (const [k, v] of Object.entries(rollStats(rng, 100, signature))) sums[k] += v;
+      }
+      const top = STAT_NAMES.reduce((a, b) => (sums[a] > sums[b] ? a : b));
+      assert.equal(top, signature, `${type} should lead on ${signature}`);
+    }
+  });
+
+  it('makes the signature the highest stat on most haunts', () => {
+    // The card must read as its type. Tuned to ~94%; guard against regression
+    // in either direction — too low and identity is mush, too high and every
+    // haunt of a type looks the same.
+    const rng = makeRng(1);
+    const n = 20_000;
+    let leads = 0;
+    for (let i = 0; i < n; i++) {
+      const budget = Object.values(BUDGETS)[i % RARITIES.length];
+      const stats = rollStats(rng, budget, 'Anchor');
+      const others = STAT_NAMES.filter((k) => k !== 'Anchor').map((k) => stats[k]);
+      if (stats.Anchor > Math.max(...others)) leads += 1;
+    }
+    const rate = leads / n;
+    assert.ok(rate > 0.90, `signature led only ${(rate * 100).toFixed(1)}% of the time`);
+    assert.ok(rate < 0.99, `signature led ${(rate * 100).toFixed(1)}% — too formulaic`);
+  });
+
+  it('still varies widely on the signature stat', () => {
+    // Identity must not flatten into a fixed value.
+    const rng = makeRng(0);
+    const seen = new Set();
+    for (let i = 0; i < 200; i++) seen.add(rollStats(rng, 100, 'Power').Power);
+    assert.ok(seen.size > 25, `only ${seen.size} distinct Power values`);
   });
 
   it('varies between rolls', () => {
     const rng = makeRng(0);
     const seen = new Set();
     for (let i = 0; i < 50; i++) {
-      seen.add(Object.values(rollStats(rng, 200)).join(','));
+      seen.add(Object.values(rollStats(rng, 75, 'Power')).join(','));
     }
     assert.ok(seen.size > 45, `only ${seen.size} distinct`);
   });
 
   it('rejects a budget above the cap', () => {
-    assert.throws(() => rollStats(makeRng(0), 601), RangeError);
+    assert.throws(() => rollStats(makeRng(0), 501, 'Power'), RangeError);
   });
 
   it('fills every axis at the maximum budget', () => {
-    const stats = rollStats(makeRng(0), 600);
+    const stats = rollStats(makeRng(0), 500, 'Power');
     assert.ok(Object.values(stats).every((v) => v === STAT_CAP));
   });
 });

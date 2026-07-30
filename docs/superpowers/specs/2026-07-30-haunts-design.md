@@ -33,36 +33,45 @@ minutes.** Walking past a supermarket collects nothing; doing your shopping
 collects the Spirit of Aisle Seven. This is the central rule — it makes
 lingering the verb of the game.
 
-## Location catalog
+## Types and the location catalog
 
-30 location types at launch, each mapped to an OpenStreetMap tag. The catalog is
-a flat data table so it extends to hundreds of location types later without any
-code change.
+Five haunt types. Each owns exactly one stat — its **signature** — which is what
+gives a haunt of that type its character.
 
-| Water | Green | Fluorescent | Hearth |
-|---|---|---|---|
-| `natural=beach` | `natural=wood` | `shop=supermarket` | `shop=bakery` |
-| `waterway=river` | `leisure=park` | `shop=convenience` | `amenity=cafe` |
-| `natural=water` | `landuse=farmland` | `amenity=pharmacy` | `amenity=pub` |
-| `natural=wetland` | `natural=peak` | `amenity=school` | `amenity=restaurant` |
-| | | | `shop=laundry` |
-| | | | `shop=hairdresser` |
+| Type | Signature stat | Where it is found |
+|---|---|---|
+| **Occupations** | Dread | Shops, trades, services, schools, transit, industry |
+| **Cultural** | Anchor | Monuments, castles, museums, churches, libraries, theatres |
+| **Forest** | Insight | Woods, parks, fields, peaks, moors — nature generally |
+| **Water** | Presence | Lakes, rivers, coast, wetlands, springs, harbours |
+| **Graveyard** | Power | Cemeteries, tombs, mausoleums, crematoria |
 
-| Stone | Rust | Transit | Sacred | Bone |
-|---|---|---|---|---|
-| `tourism=museum` | `amenity=parking` | `highway=bus_stop` | `amenity=place_of_worship` | `landuse=cemetery` |
-| `amenity=library` | `amenity=fuel` | `railway=station` | | `amenity=hospital` |
-| `bridge=yes` | `landuse=construction` | | | |
-| | `shop=doityourself` | | | |
+Every stat is a signature for exactly one type, so no stat is anonymous.
 
-Nine types, 30 locations, one authored species each.
+### Mapping OpenStreetMap onto five types
+
+`src/types.js` maps **130+ OSM tags** into the five types, resolved in two steps:
+
+1. **Exact tag** — `shop=butcher` → Occupations, `historic=castle` → Cultural.
+2. **Key fallback** — whole namespaces where every value fits one type:
+   `office=` and `craft=` → Occupations, `waterway=` → Water, `historic=` →
+   Cultural.
+
+Exact entries beat the fallback, which is how `historic=tomb` lands in Graveyard
+while every other `historic=` is Cultural. Unmapped tags return `null` and yield
+nothing — a dormitory is not a haunt.
+
+This table is the single source of truth for place classification. A species
+declares only its OSM tag and **derives** its type, so the two cannot drift.
+
+Adding coverage is data entry: append a tag to the right list.
 
 ## Data model
 
 The key split is **species vs. catch**.
 
-- **Species** — 30 rows, authored once, shipped in the bundle. Name, location
-  tag, type, description, art slot.
+- **Species** — 30 rows, authored once, shipped in the bundle. Name, OSM tag,
+  description, art slot. Type is derived, not stored.
 - **Catch** — unlimited, generated. A species plus a rarity roll plus rolled
   stats plus timestamp, place name, and weather.
 
@@ -71,24 +80,57 @@ creature from your first, and only one of them is worth keeping.
 
 ### Stats
 
-Six axes, shown as a radar chart, identical across all species so any two
-haunts are comparable:
+Five axes, shown as a radar chart, identical across all species so any two
+haunts are comparable. **Each axis is scored 0–100.**
 
-**Rizz · Gooning · Sigma · Aura · Skibidi · Sussy**
+| Stat | Meaning |
+|---|---|
+| **Power** | Raw force |
+| **Dread** | Scariness |
+| **Anchor** | Durability — how firmly it holds its place in the world |
+| **Presence** | Aura, "feltness" |
+| **Insight** | Intelligence and wisdom |
 
-Values are random. Rarity sets the total point budget; the roll distributes it
-randomly across the six axes, capped at 100 each.
+Rarity sets how many points there are to distribute across the five:
 
-| Rarity | Budget | Base chance |
-|---|---|---|
-| Common | 120 | 70% |
-| Uncommon | 200 | 22% |
-| Rare | 300 | 7% |
-| Mythic | 420 | 1% |
+| Rarity | Points | Base chance | Chance at 20k steps |
+|---|---|---|---|
+| Shade | 50 | 55% | 15% |
+| Phantom | 75 | 27% | 22% |
+| Wraith | 100 | 13% | 30% |
+| Revenant | 125 | 4% | 23% |
+| Reaper | 150 | 1% | 10% |
 
-Steps walked that day shift the distribution away from Common toward the higher
+Steps walked that day shift the distribution away from Shade toward the higher
 tiers, saturating at 20,000 steps. More walking means better haunts, never more
 haunts — the number you get is governed by where you lingered.
+
+### Allocating the points
+
+Stats are **not** uniformly random: the spread has to read as the haunt's
+identity. A Graveyard Reaper should look like raw Power, a Forest one like
+Insight. Allocation runs in two stages:
+
+1. **Reserve** 35% of the budget for the type's signature stat.
+2. **Distribute** the remainder with Dirichlet(1,…,1) weights — uniform over the
+   simplex, so the four non-signature axes are treated alike and spiky rolls are
+   common — with the signature's weight doubled.
+
+Clamping at 100 leaves a remainder, handed back out one point at a time so the
+total lands exactly on the budget.
+
+Both dials were tuned empirically over 20,000 rolls:
+
+| Reserve | Weight | Signature is highest | Signature's share | Spread (sd) |
+|---|---|---|---|---|
+| 0.30 | 1.0 | 76% | 44% | 11 |
+| **0.35** | **2.0** | **94%** | **54%** | **13** |
+| 0.40 | 2.5 | 99% | 60% | 12 |
+
+0.35 / 2.0 is the chosen point: identity is unmistakable on ~94% of haunts,
+while roughly one in sixteen still surprises you. Pushing higher makes every
+haunt of a type look the same. A regression test pins the rate between 90% and
+99% in both directions.
 
 ## Platform
 
@@ -181,6 +223,40 @@ layer up, and it is a game-design decision rather than a bug fix:
 
 Unresolved; the prototype currently does none of these, so the raw behaviour
 stays visible.
+
+## Open: species coverage is lopsided
+
+280 OSM tags now map to a type, but only 30 have a species, and they are not
+spread evenly:
+
+| Type | Tags mapped | Species |
+|---|---|---|
+| Occupations | 127 | 17 |
+| Cultural | 52 | 4 |
+| Forest | 42 | 4 |
+| Water | 43 | 4 |
+| Graveyard | 16 | 1 |
+
+So a crematorium, a mausoleum and a tomb all classify correctly as Graveyard and
+then yield nothing, because only `landuse=cemetery` has a haunt. Roughly 15–20
+new species would balance this. Not yet written.
+
+Two ways to close it, undecided:
+
+- **Author a species per popular tag** — keeps every haunt specific and
+  characterful, but the catalog has to keep growing forever.
+- **Add a generic fallback haunt per type** — any mapped place then yields
+  something, and specific species become the treat. Caps the authoring work at
+  five extra entries.
+
+## Next step
+
+Turn this spec into an implementation plan for the Expo app. Blocked on nothing
+except the species question above, which can also be settled later — the seams
+already exist.
+
+Note: `npm` is not on PATH on the development machine even though `node` is;
+that needs fixing before `create-expo-app`.
 
 ## Deferred
 

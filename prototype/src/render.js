@@ -10,11 +10,14 @@
 
 import { STAT_CAP, STAT_NAMES } from './spawner.js';
 import { BY_ID } from './species.js';
+import { signatureFor } from './types.js';
 
 const BAR_W = 22;
 /** Every card line is exactly this wide between the borders. */
 const INNER = 46;
-const RARITY_MARK = { Common: '·', Uncommon: '+', Rare: '*', Mythic: '★' };
+const RARITY_MARK = {
+  Shade: '·', Phantom: '∘', Wraith: '+', Revenant: '*', Reaper: '★',
+};
 const LABEL_W = Math.max(...STAT_NAMES.map((s) => s.length));
 
 export { INNER };
@@ -67,9 +70,11 @@ export function card(c) {
     row(` ${mark} ${c.rarity} · ${sp.type}`),
     rule('├', '┤'),
   ];
+  const signature = signatureFor(sp.type);
   for (const name of STAT_NAMES) {
     const v = c.stats[name];
-    lines.push(row(`  ${name.padEnd(LABEL_W)} ${bar(v)} ${String(v).padStart(3)}`));
+    const mark = name === signature ? '▸' : ' ';
+    lines.push(row(`${mark} ${name.padEnd(LABEL_W)} ${bar(v)} ${String(v).padStart(3)}`));
   }
   lines.push(
     rule('├', '┤'),
