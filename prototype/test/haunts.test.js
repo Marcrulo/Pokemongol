@@ -29,13 +29,28 @@ function still(minutes, start = 0, lat = LAT, lon = LON) {
 const aStay = () => findStays(still(25))[0];
 
 describe('catalog', () => {
-  it('has thirty species', () => {
-    assert.equal(CATALOG.length, 30);
+  it('covers every type', () => {
+    // Asserting a count would just need editing every time a species is
+    // added. What matters is that no type is left without a haunt, which is
+    // what makes a mapped place yield nothing.
+    for (const type of TYPES) {
+      assert.ok(
+        CATALOG.some((s) => s.type === type),
+        `no species for ${type}`,
+      );
+    }
   });
 
   it('has unique ids and tags', () => {
-    assert.equal(new Set(CATALOG.map((s) => s.id)).size, 30);
-    assert.equal(new Set(CATALOG.map((s) => s.osmTag)).size, 30);
+    assert.equal(new Set(CATALOG.map((s) => s.id)).size, CATALOG.length);
+    assert.equal(new Set(CATALOG.map((s) => s.osmTag)).size, CATALOG.length);
+  });
+
+  it('gives every species a name and a blurb', () => {
+    for (const s of CATALOG) {
+      assert.ok(s.name?.length > 0, s.id);
+      assert.ok(s.blurb?.length > 0, s.id);
+    }
   });
 
   it('only uses declared types', () => {
@@ -483,7 +498,7 @@ describe('store', () => {
     for (const tag of ['amenity=pub', 'amenity=pub', 'amenity=cafe']) {
       store.add('2026-07-30', spawn(rng, aStay(), tag, 'x', 9_000));
     }
-    assert.deepEqual(store.dexProgress(), { seen: 2, total: 30 });
+    assert.deepEqual(store.dexProgress(), { seen: 2, total: CATALOG.length });
   });
 });
 

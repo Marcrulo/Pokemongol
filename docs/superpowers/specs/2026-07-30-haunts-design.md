@@ -70,12 +70,12 @@ Adding coverage is data entry: append a tag to the right list.
 
 The key split is **species vs. catch**.
 
-- **Species** — 30 rows, authored once, shipped in the bundle. Name, OSM tag,
+- **Species** — 60 rows, authored once, shipped in the bundle. Name, OSM tag,
   description, art slot. Type is derived, not stored.
 - **Catch** — unlimited, generated. A species plus a rarity roll plus rolled
   stats plus timestamp, place name, and weather.
 
-30 species, infinite catches. Your fifth Spirit of Aisle Seven is a different
+60 species, infinite catches. Your fifth Spirit of Aisle Seven is a different
 creature from your first, and only one of them is worth keeping.
 
 ### Stats
@@ -197,7 +197,7 @@ a bundled offline extract later.
 Built now, in `prototype/`, as runnable ES modules under Node — the same files
 the app will import:
 
-- The 30-species catalog
+- The 60-species catalog
 - Dwell detection over a synthetic GPS trail at the real 30-second cadence
 - The spawner: rarity curve, stat rolls, seeded and reproducible
 - A store interface, with an in-memory implementation and the SQL schema for
@@ -229,28 +229,27 @@ stays visible.
 
 ## Open: species coverage is lopsided
 
-280 OSM tags now map to a type, but only 30 have a species, and they are not
-spread evenly:
+280 OSM tags map to a type. 60 have a species — up from 30, after a second
+wave aimed squarely at the emptiest corners:
 
-| Type | Tags mapped | Species |
-|---|---|---|
-| Occupations | 127 | 17 |
-| Cultural | 52 | 4 |
-| Forest | 42 | 4 |
-| Water | 43 | 4 |
-| Graveyard | 16 | 1 |
+| Type | Tags mapped | Species | Was |
+|---|---|---|---|
+| Occupations | 127 | 24 | 17 |
+| Cultural | 52 | 10 | 4 |
+| Forest | 42 | 10 | 4 |
+| Water | 43 | 10 | 4 |
+| Graveyard | 16 | 6 | 1 |
 
-So a crematorium, a mausoleum and a tomb all classify correctly as Graveyard and
-then yield nothing, because only `landuse=cemetery` has a haunt. Roughly 15–20
-new species would balance this. Not yet written.
+A crematorium, a churchyard and a grave now all yield something; previously
+only `landuse=cemetery` did. The second wave targeted places people actually
+stand in — a bank queue, a bus stop, a fountain, one good tree.
 
-Two ways to close it, undecided:
+The gap is narrower but not closed, and closing it entirely by authoring is a
+losing race against OpenStreetMap. The remaining option, still undecided:
 
-- **Author a species per popular tag** — keeps every haunt specific and
-  characterful, but the catalog has to keep growing forever.
 - **Add a generic fallback haunt per type** — any mapped place then yields
-  something, and specific species become the treat. Caps the authoring work at
-  five extra entries.
+  something, and a specific species becomes the treat. Caps the authoring work
+  at five entries, at the cost of some places feeling generic.
 
 ## Next step
 

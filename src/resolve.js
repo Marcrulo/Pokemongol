@@ -32,15 +32,48 @@ out tags center 60;`;
  */
 function score(osmTag, tags) {
   if (!typeForTag(osmTag)) return -1;
-  return (forTag(osmTag) ? 10 : 1) + (tags.name ? 2 : 0);
+  return (forTag(osmTag) ? 10 : 1) + (nameOf(tags) ? 2 : 0);
 }
 
+/**
+ * Tags whose raw value reads badly on a card. `amenity=parking` becoming
+ * "Parking" is technically correct and says nothing; "The car park" at least
+ * sounds like somewhere you stood.
+ */
+const LABELS = Object.freeze({
+  'amenity=parking': 'The car park',
+  'amenity=place_of_worship': 'The church',
+  'amenity=grave_yard': 'The churchyard',
+  'landuse=cemetery': 'The cemetery',
+  'highway=bus_stop': 'The bus stop',
+  'natural=water': 'The water',
+  'natural=wood': 'The woods',
+  'landuse=forest': 'The woods',
+  'leisure=park': 'The park',
+  'natural=tree': 'A tree',
+  'bridge=yes': 'The bridge',
+  'landuse=construction': 'The building site',
+  'landuse=allotments': 'The allotments',
+  'waterway=stream': 'The stream',
+  'waterway=river': 'The river',
+});
+
 /** Turn `shop=butcher` into something a person would read. */
-const prettify = (osmTag) =>
-  osmTag
+function prettify(osmTag) {
+  if (LABELS[osmTag]) return LABELS[osmTag];
+  return osmTag
     .split('=')[1]
     .replace(/_/g, ' ')
     .replace(/^./, (c) => c.toUpperCase());
+}
+
+/**
+ * The best name available. Many real features carry no `name` at all but do
+ * carry an operator or a brand, which reads far better than the tag: "Netto"
+ * rather than "Supermarket".
+ */
+const nameOf = (tags) =>
+  tags.name ?? tags['name:en'] ?? tags.brand ?? tags.operator ?? null;
 
 /** @returns {{osmTag: string, placeName: string}|null} */
 function pickBest(elements) {
@@ -53,7 +86,7 @@ function pickBest(elements) {
       const s = score(osmTag, tags);
       if (s > bestScore) {
         bestScore = s;
-        best = { osmTag, placeName: tags.name ?? prettify(osmTag) };
+        best = { osmTag, placeName: nameOf(tags) ?? prettify(osmTag) };
       }
     }
   }

@@ -29,7 +29,7 @@ day.
 | File | What it is |
 |---|---|
 | `src/types.js` | The 5 haunt types, their signature stats, and 130+ OSM tags |
-| `src/species.js` | The 30-species catalog, keyed to OpenStreetMap tags |
+| `src/species.js` | The 60-species catalog, keyed to OpenStreetMap tags |
 | `src/dwell.js` | The 5-minute rule: GPS trail → stays |
 | `src/spawner.js` | Pure function: stay → catch. Rarity curve and stat rolls |
 | `src/rng.js` | Seeded RNG, so a given day is reproducible |

@@ -14,7 +14,7 @@ import { CLUSTER_RADIUS_M, distanceM, findStays } from '../prototype/src/dwell.j
 import { makeRng, seedFrom } from '../prototype/src/rng.js';
 import { spawn } from '../prototype/src/spawner.js';
 import { sunAltitude } from '../prototype/src/sun.js';
-import { dayOf, replaceDay, trailForDay } from './db.js';
+import { dayOf, daysWithFixes, replaceDay, trailForDay } from './db.js';
 import { allowRepeatPlaces, dwellThreshold } from './dev.js';
 import { resolvePlace } from './resolve.js';
 import { hourlyForDay, readHour } from './weather.js';
@@ -110,6 +110,37 @@ export async function collect(day) {
     steps,
     unresolved,
     weather: hourly ? 'open-meteo' : 'none',
+  };
+}
+
+/**
+ * Collect every day the trail still covers, newest first.
+ *
+ * Collecting only today loses whole days: the app is meant to be opened in the
+ * evening, and skipping an evening meant that day's haunts were never created,
+ * then its fixes aged out after a week and the day was gone for good. Days
+ * already collected are cheap to redo — resolution and weather are both
+ * cached, and seeding is deterministic, so re-collecting yields exactly what
+ * it did the first time.
+ *
+ * @returns {Promise<{days: number, caught: number, today: object}>}
+ */
+export async function collectRecent() {
+  const days = await daysWithFixes();
+  const today = dayOf();
+  if (!days.includes(today)) days.unshift(today);
+
+  let caught = 0;
+  let todayResult = null;
+  for (const day of days) {
+    const result = await collect(day);
+    caught += result.catches.length;
+    if (day === today) todayResult = result;
+  }
+  return {
+    days: days.length,
+    caught,
+    today: todayResult ?? { catches: [], stays: 0, steps: 0, unresolved: 0 },
   };
 }
 

@@ -20,7 +20,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CATALOG } from './prototype/src/species.js';
-import { collect } from './src/collect.js';
+import { collectRecent } from './src/collect.js';
 import { bestPerSpecies, catchesForDay, clearDay, dayOf } from './src/db.js';
 import {
   DEV_DWELL_SECONDS,
@@ -30,6 +30,7 @@ import {
 } from './src/dev.js';
 import { isTracking, startTracking, stopTracking } from './src/tracker.js';
 import HauntCard from './src/ui/HauntCard.js';
+import UnseenRow from './src/ui/UnseenRow.js';
 import { C } from './src/ui/theme.js';
 
 const TABS = ['Today', 'Collection'];
@@ -47,14 +48,16 @@ export default function App() {
     setBusy(true);
     const day = dayOf();
     try {
-      const { stays, steps, unresolved, weather } = await collect(day);
+      const { days, today: t } = await collectRecent();
+      const { stays, steps, unresolved, weather } = t;
       if (unresolved > 0) {
         setNote(
           `${unresolved} place${unresolved > 1 ? 's' : ''} not looked up yet — no connection.`,
         );
       } else {
+        const earlier = days > 1 ? ` · ${days - 1} earlier day${days > 2 ? 's' : ''} caught up` : '';
         const summary =
-          `${stays} stay${stays === 1 ? '' : 's'} · ~${steps.toLocaleString()} steps`;
+          `${stays} stay${stays === 1 ? '' : 's'} · ~${steps.toLocaleString()} steps${earlier}`;
         // Daylight is always recorded; only the fetched three can be missing.
         setNote(
           weather === 'none' && stays > 0
@@ -103,7 +106,17 @@ export default function App() {
     await refresh();
   };
 
-  const items = tab === 'Today' ? today : collection;
+  // The collection screen is caught haunts first, then the gaps — the gaps
+  // being the part that suggests going somewhere new.
+  const seen = new Set(collection.map((c) => c.speciesId));
+  const unseen = CATALOG.filter((sp) => !seen.has(sp.id));
+  const items =
+    tab === 'Today'
+      ? today
+      : [
+          ...collection.map((c) => ({ kind: 'caught', key: `c${c.id}`, data: c })),
+          ...unseen.map((sp) => ({ kind: 'unseen', key: `u${sp.id}`, data: sp })),
+        ];
   const empty =
     tab === 'Today'
       ? 'Nothing has attached to you today.\nStay somewhere for five minutes.'
@@ -162,8 +175,14 @@ export default function App() {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <HauntCard item={item} />}
+          keyExtractor={(item) => item.key ?? String(item.id)}
+          renderItem={({ item }) =>
+            item.kind === 'unseen' ? (
+              <UnseenRow species={item.data} />
+            ) : (
+              <HauntCard item={item.kind === 'caught' ? item.data : item} />
+            )
+          }
           contentContainerStyle={s.list}
           refreshControl={
             <RefreshControl refreshing={busy} onRefresh={refresh} tintColor={C.accent} />
