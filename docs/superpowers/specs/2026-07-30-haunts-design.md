@@ -167,7 +167,10 @@ Five components, each independently testable.
   battery-sensitive component.
 - **Dwell detector** — trail → list of stays. Consecutive fixes within 50 m of a
   cluster anchor; a cluster lasting ≥ 5 minutes is a stay. 50 m absorbs GPS
-  jitter without merging adjacent shops.
+  jitter without merging adjacent shops. A cluster also ends when the trail
+  goes quiet for more than four intervals: on real hardware Android delivers
+  in bursts and then nothing for minutes, and unobserved time must not count
+  as time spent.
 - **Resolver** — stay coordinates → location tag, via a cached Overpass query.
   Behind an interface, with an offline fallback so the rest of the app never
   depends on the network.

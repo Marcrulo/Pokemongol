@@ -27,20 +27,23 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
     return;
   }
   for (const loc of data.locations) {
-    // Temporary instrumentation: is the provider handing back stale, cached
-    // fixes? Age and accuracy answer that; remove once the trail is trusted.
-    const age = Math.round((Date.now() - loc.timestamp) / 1000);
-    console.log(
-      `[haunts] fix ${new Date(loc.timestamp).toISOString()} age=${age}s ` +
-        `acc=${loc.coords.accuracy?.toFixed(0)}m ` +
-        `${loc.coords.latitude.toFixed(6)},${loc.coords.longitude.toFixed(6)}`,
-    );
-    await recordFix({
+    const written = await recordFix({
       t: Math.floor(loc.timestamp / 1000),
       lat: loc.coords.latitude,
       lon: loc.coords.longitude,
       accuracy: loc.coords.accuracy ?? null,
     });
+
+    // Only report what actually reached the trail. Android delivers several
+    // times faster than we sample, so logging every delivery buries the
+    // signal — and the discarded ones are not evidence of anything.
+    if (written) {
+      const age = Math.round((Date.now() - loc.timestamp) / 1000);
+      console.log(
+        `[haunts] fix age=${age}s acc=${loc.coords.accuracy?.toFixed(0)}m ` +
+          `${loc.coords.latitude.toFixed(6)},${loc.coords.longitude.toFixed(6)}`,
+      );
+    }
   }
 });
 

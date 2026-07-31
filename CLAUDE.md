@@ -83,6 +83,9 @@ done
 - **Identical GPS coordinates across many fixes.** Android replays cached
   locations while the phone is still. `recorded_at` (sample time) is what the
   trail uses; `t` is the provider's stamp and may be stale. Both are stored.
+- **Fixes arriving in bursts, then long silence.** Delivery tracks the app's
+  lifecycle, not the 30-second timer. `recordFix` throttles the bursts away and
+  `MAX_GAP_SECONDS` stops the silences being counted as time spent.
 - **A permanent notification.** Android forbids hiding a foreground service.
   It is part of the design, not a bug to fix.
 - **The signature stat dominating.** By design, on ~94% of haunts.
