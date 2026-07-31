@@ -65,10 +65,34 @@ export async function isTracking() {
   return Location.hasStartedLocationUpdatesAsync(TASK);
 }
 
+/**
+ * What Android will actually let us do right now.
+ *
+ * `foreground-only` is the dangerous one and the reason this exists: the task
+ * registers, the service runs, the button says "Listening", and nothing is
+ * ever recorded — because the app is only permitted to see location while it
+ * is open, which is the one time it isn't needed. It is not a first-run
+ * problem either. Android revokes background location from apps it decides
+ * are unused, so a working install becomes a silent one months later.
+ *
+ * @returns {Promise<'ready'|'foreground-only'|'off'>}
+ */
+export async function permissionState() {
+  const fg = await Location.getForegroundPermissionsAsync();
+  if (fg.status !== 'granted') return 'off';
+  const bg = await Location.getBackgroundPermissionsAsync();
+  return bg.status === 'granted' ? 'ready' : 'foreground-only';
+}
+
 export async function startTracking() {
+  // Checked even when already started: permission can be withdrawn under a
+  // running task, and the old early return meant we never noticed.
+  const state = await permissionState();
+  if (state !== 'ready') {
+    const perm = await requestPermissions();
+    if (!perm.ok) return perm;
+  }
   if (await isTracking()) return { ok: true };
-  const perm = await requestPermissions();
-  if (!perm.ok) return perm;
 
   await Location.startLocationUpdatesAsync(TASK, {
     // Balanced targets ~100 m, which Android satisfies from Wi-Fi and cell

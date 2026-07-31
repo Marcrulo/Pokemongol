@@ -87,6 +87,7 @@ export async function collect(day) {
   }
 
   const catches = [];
+  let emptyPlaces = 0;
   for (const { stay, place } of keep) {
     // Place-only seeding keeps a catch stable across re-collection. When
     // repeats are allowed the stay's start has to join the seed, or two visits
@@ -101,6 +102,7 @@ export async function collect(day) {
       readingFor(day, stay, hourly),
     );
     if (c) catches.push(c);
+    else emptyPlaces++; // resolved fine, but no species has that tag yet
   }
 
   await replaceDay(day, catches);
@@ -109,6 +111,9 @@ export async function collect(day) {
     stays: stays.length,
     steps,
     unresolved,
+    // Distinguishes "you never stopped" from "you stopped somewhere with
+    // nobody in". Without it both render identically, which reads as broken.
+    emptyPlaces,
     weather: hourly ? 'open-meteo' : 'none',
   };
 }

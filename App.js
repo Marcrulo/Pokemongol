@@ -21,15 +21,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CATALOG } from './prototype/src/species.js';
 import { collectRecent } from './src/collect.js';
-import { bestPerSpecies, catchesForDay, clearDay, dayOf } from './src/db.js';
+import {
+  bestPerSpecies,
+  catchesForDay,
+  clearDay,
+  dayOf,
+  lastFixAt,
+  verdictsForDay,
+} from './src/db.js';
 import {
   DEV_DWELL_SECONDS,
   IS_DEV,
   devFlags,
   setDevFlag,
 } from './src/dev.js';
-import { isTracking, startTracking, stopTracking } from './src/tracker.js';
+import {
+  isTracking,
+  permissionState,
+  startTracking,
+  stopTracking,
+} from './src/tracker.js';
 import HauntCard from './src/ui/HauntCard.js';
+import TrackerBanner from './src/ui/TrackerBanner.js';
 import UnseenRow from './src/ui/UnseenRow.js';
 import { C } from './src/ui/theme.js';
 
@@ -43,13 +56,18 @@ export default function App() {
   const [collection, setCollection] = useState([]);
   const [note, setNote] = useState('');
   const [flags, setFlags] = useState(devFlags());
+  const [verdicts, setVerdicts] = useState({});
+  const [permission, setPermission] = useState('ready');
+  const [lastFix, setLastFix] = useState(null);
+  const [dayShape, setDayShape] = useState({ stays: 0, steps: 0, emptyPlaces: 0 });
 
   const refresh = useCallback(async () => {
     setBusy(true);
     const day = dayOf();
     try {
       const { days, today: t } = await collectRecent();
-      const { stays, steps, unresolved, weather } = t;
+      const { stays, steps, unresolved, weather, emptyPlaces } = t;
+      setDayShape({ stays, steps, emptyPlaces });
       if (unresolved > 0) {
         setNote(
           `${unresolved} place${unresolved > 1 ? 's' : ''} not looked up yet — no connection.`,
@@ -69,8 +87,11 @@ export default function App() {
       setNote(`Could not collect: ${e.message}`);
     }
     setToday(await catchesForDay(day));
+    setVerdicts(await verdictsForDay(day));
     setCollection(await bestPerSpecies());
     setTracking(await isTracking());
+    setPermission(await permissionState());
+    setLastFix(await lastFixAt());
     setBusy(false);
   }, []);
 
@@ -117,10 +138,29 @@ export default function App() {
           ...collection.map((c) => ({ kind: 'caught', key: `c${c.id}`, data: c })),
           ...unseen.map((sp) => ({ kind: 'unseen', key: `u${sp.id}`, data: sp })),
         ];
+  // A blank day is the common case — the five-minute rule guarantees it. Each
+  // line makes the emptiness a property of the day rather than user error.
+  const emptyToday = () => {
+    if (!tracking && lastFix === null) {
+      return 'No trail for today yet.\nHaunts hears nothing while it is not listening.';
+    }
+    if (dayShape.emptyPlaces > 0) {
+      const n = dayShape.emptyPlaces;
+      return `${n === 1 ? 'One place' : `${n} places`} held you today.\n${n === 1 ? 'It had nobody in.' : 'None of them had anyone in.'}`;
+    }
+    if (dayShape.steps > 3000) {
+      return `${dayShape.steps.toLocaleString()} steps, and not one place\ncould get a grip on you.`;
+    }
+    if (collection.length === 0) {
+      return 'Nothing yet.\nHaunts notices places you stay in for five minutes —\na cafe, a queue, a bench. Walking past collects nothing.';
+    }
+    return 'A still day. Nothing came,\nand nothing was looking.';
+  };
+
   const empty =
     tab === 'Today'
-      ? 'Nothing has attached to you today.\nStay somewhere for five minutes.'
-      : 'Your collection is empty.';
+      ? emptyToday()
+      : 'Nothing kept yet. Below are the sixty things\nthat exist; every one of them is somewhere.';
 
   return (
     <SafeAreaView style={s.screen}>
@@ -133,14 +173,12 @@ export default function App() {
         </Text>
       </View>
 
-      <Pressable
-        onPress={toggleTracking}
-        style={[s.tracker, tracking ? s.trackerOn : s.trackerOff]}
-      >
-        <Text style={s.trackerText}>
-          {tracking ? 'Listening — tap to stop' : 'Not listening — tap to start'}
-        </Text>
-      </Pressable>
+      <TrackerBanner
+        state={permission}
+        tracking={tracking}
+        lastFix={lastFix}
+        onToggle={toggleTracking}
+      />
 
       <View style={s.tabs}>
         {TABS.map((t) => (
@@ -179,8 +217,13 @@ export default function App() {
           renderItem={({ item }) =>
             item.kind === 'unseen' ? (
               <UnseenRow species={item.data} />
+            ) : item.kind === 'caught' ? (
+              <HauntCard item={item.data} />
             ) : (
-              <HauntCard item={item.kind === 'caught' ? item.data : item} />
+              // Verdicts belong to the reveal, not the collection: every card
+              // in Collection is by definition the best one, so the line would
+              // be noise on every row.
+              <HauntCard item={item} verdict={verdicts[item.id]} />
             )
           }
           contentContainerStyle={s.list}
