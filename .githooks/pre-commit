@@ -1,0 +1,31 @@
+#!/bin/bash
+# Keep docs/species.csv in step with the catalogue.
+#
+# The CSV is a convenience copy, and copies rot. A test already fails when it
+# drifts, but a failing test after the fact is worse than never drifting: this
+# regenerates and stages it as part of any commit that touches species.js, so
+# adding a haunt cannot forget to reference it.
+#
+# Enabled by: git config core.hooksPath .githooks
+
+set -e
+
+# Only act when the catalogue is actually part of this commit.
+if ! git diff --cached --name-only | grep -q 'prototype/src/species.js'; then
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+NODE="$HOME/.local/node/bin/node"
+[ -x "$NODE" ] || NODE="$(command -v node || true)"
+
+if [ -z "$NODE" ]; then
+  echo "pre-commit: no node found; docs/species.csv may be stale." >&2
+  exit 0   # never block a commit over a derived file
+fi
+
+"$NODE" "$ROOT/prototype/catalog.js" --csv > "$ROOT/docs/species.csv"
+git add "$ROOT/docs/species.csv"
+
+COUNT=$(($(wc -l < "$ROOT/docs/species.csv") - 1))
+echo "pre-commit: regenerated docs/species.csv ($COUNT haunts)"

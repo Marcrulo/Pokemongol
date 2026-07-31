@@ -36,6 +36,25 @@ subdirectory** — it would force a duplicate copy of the rules.
 `prototype/` runs under Node *and* imports unchanged into React Native. Keep it
 free of `expo-*` imports or that breaks.
 
+## Adding a haunt
+
+Append to `RAW` in `prototype/src/species.js`. Type is derived from the OSM tag
+via `types.js`, so a tag with no mapping throws at import — that is deliberate.
+
+`docs/species.csv` is a generated copy and must stay in step. A pre-commit hook
+regenerates and stages it automatically, but **hooks are local config and do
+not survive a clone**:
+
+```sh
+git config core.hooksPath .githooks    # once per clone
+```
+
+Without that the hook silently does nothing. A test in
+`prototype/test/csv.test.js` is the backstop and names the fix when it fails.
+
+`node prototype/catalog.js --gaps` lists tags that classify correctly and still
+yield nothing — the argument for which haunt to write next.
+
 ## Tests
 
 ```sh
