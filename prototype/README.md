@@ -15,6 +15,9 @@ node --test "test/**/*.test.js"   # 104 tests
 node catalog.js               # the species catalogue, grouped
 node catalog.js --csv         # the same, for a spreadsheet
 node catalog.js --md          # one markdown table, every haunt
+
+# docs/species.csv is a checked-in copy; regenerate after adding a haunt:
+node catalog.js --csv > ../docs/species.csv
 node catalog.js --gaps        # tags that classify but yield nothing
 ```
 
