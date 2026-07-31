@@ -11,6 +11,7 @@
 
 import * as SQLite from 'expo-sqlite';
 
+import { summarize } from '../prototype/src/conditions.js';
 import { SCHEMA } from '../prototype/src/store.js';
 
 /**
@@ -43,22 +44,62 @@ CREATE TABLE IF NOT EXISTS places (
     place_name TEXT NOT NULL,
     fetched_at INTEGER NOT NULL
 );
+
+-- One row per day per coarse cell: the whole 24-hour array in one blob, so a
+-- day costs a single request no matter how many places you lingered in.
+CREATE TABLE IF NOT EXISTS weather_days (
+    cell       TEXT NOT NULL,
+    day        TEXT NOT NULL,
+    hourly     TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (cell, day)
+);
 `;
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+
+/** Columns added to `catches` in version 2. Nullable, so old rows stay valid. */
+const WEATHER_COLUMNS = [
+  'temp_c REAL',
+  'precip_mm REAL',
+  'cloud_pct REAL',
+  'sun_altitude REAL',
+  'weather_source TEXT',
+];
 
 /**
- * The trail is a seven-day scratch buffer, so version 1 simply drops it rather
- * than migrating rows into the new shape. Catches are never touched — those are
- * the only rows that matter.
+ * Catches are never dropped — they are the only rows that matter. The trail is
+ * a seven-day scratch buffer and can be rebuilt by walking, so version 1 drops
+ * it outright rather than reshaping rows.
  *
  * @param {SQLite.SQLiteDatabase} d
  */
 async function migrate(d) {
   const row = await d.getFirstAsync('PRAGMA user_version');
-  const version = row?.user_version ?? 0;
+  let version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;
-  await d.execAsync('DROP TABLE IF EXISTS fixes');
+
+  if (version < 1) {
+    // `t` was the primary key with INSERT OR REPLACE, so replayed locations
+    // silently overwrote rows instead of extending the trail.
+    await d.execAsync('DROP TABLE IF EXISTS fixes');
+    version = 1;
+  }
+
+  if (version < 2) {
+    // Only reached by a database that predates weather measurement; a fresh
+    // install gets these from SCHEMA directly.
+    const existing = await d.getAllAsync('PRAGMA table_info(catches)');
+    const have = new Set(existing.map((c) => c.name));
+    for (const column of WEATHER_COLUMNS) {
+      const name = column.split(' ')[0];
+      if (!have.has(name)) {
+        await d.execAsync(`ALTER TABLE catches ADD COLUMN ${column}`);
+      }
+    }
+    version = 2;
+  }
+
   await d.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -71,8 +112,11 @@ export function db() {
     handle = (async () => {
       const d = await SQLite.openDatabaseAsync('haunts.db');
       await d.execAsync('PRAGMA journal_mode = WAL;');
-      await migrate(d);
+      // Order matters: SCHEMA creates `catches` so the migration can inspect
+      // it, and the migration drops the old `fixes` before EXTRA_SCHEMA
+      // recreates it in the new shape.
       await d.execAsync(SCHEMA);
+      await migrate(d);
       await d.execAsync(EXTRA_SCHEMA);
       return d;
     })();
@@ -132,14 +176,18 @@ export async function replaceDay(day, catches) {
   await d.withTransactionAsync(async () => {
     await d.runAsync('DELETE FROM catches WHERE day = ?', [day]);
     for (const c of catches) {
+      const w = c.weather ?? {};
       await d.runAsync(
         `INSERT INTO catches
            (day, species_id, rarity, stats_json, total, place_name, osm_tag,
-            caught_at, dwell_seconds, weather)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            caught_at, dwell_seconds, weather,
+            temp_c, precip_mm, cloud_pct, sun_altitude, weather_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           day, c.speciesId, c.rarity, JSON.stringify(c.stats), c.total,
-          c.placeName, c.osmTag, c.caughtAt, c.dwellSeconds, c.weather,
+          c.placeName, c.osmTag, c.caughtAt, c.dwellSeconds, summarize(w),
+          w.tempC ?? null, w.precipMm ?? null, w.cloudPct ?? null,
+          w.sunAltitude ?? null, w.source ?? 'none',
         ],
       );
     }
@@ -157,7 +205,15 @@ const hydrate = (r) => ({
   osmTag: r.osm_tag,
   caughtAt: r.caught_at,
   dwellSeconds: r.dwell_seconds,
-  weather: r.weather,
+  /** The human-readable line. Catches from before weather measurement keep theirs. */
+  weatherText: r.weather,
+  weather: {
+    tempC: r.temp_c ?? null,
+    precipMm: r.precip_mm ?? null,
+    cloudPct: r.cloud_pct ?? null,
+    sunAltitude: r.sun_altitude ?? null,
+    source: r.weather_source ?? 'none',
+  },
 });
 
 export async function catchesForDay(day) {
@@ -205,5 +261,32 @@ export async function cachePlace(lat, lon, place) {
       place ? place.placeName : '',
       Math.floor(Date.now() / 1000),
     ],
+  );
+}
+
+/**
+ * @returns {Promise<{hourly: object, fetchedAt: number}|null>} null when the
+ *   day has never been fetched for that cell.
+ */
+export async function cachedWeatherDay(cell, day) {
+  const d = await db();
+  const row = await d.getFirstAsync(
+    'SELECT hourly, fetched_at FROM weather_days WHERE cell = ? AND day = ?',
+    [cell, day],
+  );
+  if (!row) return null;
+  try {
+    return { hourly: JSON.parse(row.hourly), fetchedAt: row.fetched_at };
+  } catch {
+    return null; // a corrupt blob should just be refetched
+  }
+}
+
+export async function cacheWeatherDay(cell, day, hourly) {
+  const d = await db();
+  await d.runAsync(
+    `INSERT OR REPLACE INTO weather_days (cell, day, hourly, fetched_at)
+     VALUES (?, ?, ?, ?)`,
+    [cell, day, JSON.stringify(hourly), Math.floor(Date.now() / 1000)],
   );
 }

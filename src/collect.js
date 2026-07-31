@@ -8,12 +8,15 @@
  * rerolling what you already saw.
  */
 
+import { NO_READING } from '../prototype/src/conditions.js';
+import { onePerPlace } from '../prototype/src/day.js';
 import { distanceM, findStays } from '../prototype/src/dwell.js';
 import { makeRng, seedFrom } from '../prototype/src/rng.js';
 import { spawn } from '../prototype/src/spawner.js';
-import { onePerPlace } from '../prototype/src/day.js';
-import { replaceDay, trailForDay } from './db.js';
+import { sunAltitude } from '../prototype/src/sun.js';
+import { dayOf, replaceDay, trailForDay } from './db.js';
 import { resolvePlace } from './resolve.js';
+import { hourlyForDay, readHour } from './weather.js';
 
 /** Metres per step, walking. Rough on purpose — steps only nudge rarity. */
 const STRIDE_M = 0.72;
@@ -64,13 +67,65 @@ export async function collect(day) {
     if (place) resolved.push({ stay, place });
   }
 
+  const keep = onePerPlace(resolved);
+
+  // One request for the whole day, anchored on the first place you lingered.
+  // Failure is not fatal: sun altitude still resolves and the rest records as
+  // null, to be backfilled the next time the app opens with a connection.
+  let hourly = null;
+  if (keep.length > 0) {
+    try {
+      hourly = await hourlyForDay(
+        keep[0].stay.lat, keep[0].stay.lon, day, dayOf(),
+      );
+    } catch {
+      hourly = null;
+    }
+  }
+
   const catches = [];
-  for (const { stay, place } of onePerPlace(resolved)) {
+  for (const { stay, place } of keep) {
     const rng = makeRng(seedFrom(day, place.osmTag, place.placeName));
-    const c = spawn(rng, stay, place.osmTag, place.placeName, steps, 'unknown');
+    const c = spawn(
+      rng, stay, place.osmTag, place.placeName, steps,
+      readingFor(day, stay, hourly),
+    );
     if (c) catches.push(c);
   }
 
   await replaceDay(day, catches);
-  return { catches, stays: stays.length, steps, unresolved };
+  return {
+    catches,
+    stays: stays.length,
+    steps,
+    unresolved,
+    weather: hourly ? 'open-meteo' : 'none',
+  };
+}
+
+/**
+ * The conditions for one stay, taken at its midpoint — the moment that best
+ * represents a visit rather than its edges.
+ *
+ * @param {string} day
+ * @param {{startT: number, endT: number, lat: number, lon: number}} stay
+ * @param {object|null} hourly  the day's arrays, or null if unavailable
+ * @returns {import('../prototype/src/conditions.js').Reading}
+ */
+export function readingFor(day, stay, hourly) {
+  const midpoint = (stay.startT + stay.endT) / 2;
+  const at = new Date(`${day}T00:00:00`);
+  at.setSeconds(at.getSeconds() + midpoint);
+
+  const reading = {
+    ...NO_READING,
+    sunAltitude: sunAltitude(stay.lat, stay.lon, at),
+  };
+  if (!hourly) return reading;
+
+  return {
+    ...reading,
+    ...readHour(hourly, midpoint / 3600),
+    source: 'open-meteo',
+  };
 }

@@ -15,10 +15,11 @@
  * @property {string} osmTag
  * @property {number} caughtAt       seconds since midnight
  * @property {number} dwellSeconds
- * @property {string} weather
+ * @property {import('./conditions.js').Reading} weather
  * @property {number} total
  */
 
+import { NO_READING } from './conditions.js';
 import { forTag } from './species.js';
 import { signatureFor } from './types.js';
 
@@ -182,10 +183,10 @@ export function rollStats(rng, budget, signature) {
  * @param {string} osmTag
  * @param {string} placeName
  * @param {number} steps
- * @param {string} [weather]
+ * @param {import('./conditions.js').Reading} [weather]
  * @returns {Catch|null}
  */
-export function spawn(rng, stay, osmTag, placeName, steps, weather = 'unknown') {
+export function spawn(rng, stay, osmTag, placeName, steps, weather = NO_READING) {
   const species = forTag(osmTag);
   if (species === null) return null;
 

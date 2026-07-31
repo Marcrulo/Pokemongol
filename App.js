@@ -40,12 +40,21 @@ export default function App() {
     setBusy(true);
     const day = dayOf();
     try {
-      const { stays, steps, unresolved } = await collect(day);
-      setNote(
-        unresolved > 0
-          ? `${unresolved} place${unresolved > 1 ? 's' : ''} not looked up yet — no connection.`
-          : `${stays} stay${stays === 1 ? '' : 's'} · ~${steps.toLocaleString()} steps`,
-      );
+      const { stays, steps, unresolved, weather } = await collect(day);
+      if (unresolved > 0) {
+        setNote(
+          `${unresolved} place${unresolved > 1 ? 's' : ''} not looked up yet — no connection.`,
+        );
+      } else {
+        const summary =
+          `${stays} stay${stays === 1 ? '' : 's'} · ~${steps.toLocaleString()} steps`;
+        // Daylight is always recorded; only the fetched three can be missing.
+        setNote(
+          weather === 'none' && stays > 0
+            ? `${summary} · weather unavailable, will fill in later`
+            : summary,
+        );
+      }
     } catch (e) {
       setNote(`Could not collect: ${e.message}`);
     }

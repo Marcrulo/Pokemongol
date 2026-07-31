@@ -13,6 +13,7 @@
  * @typedef {import('./spawner.js').Catch} Catch
  */
 
+import { NO_READING } from './conditions.js';
 import { spawn } from './spawner.js';
 
 /** Two stays are the same place if they resolve to the same tag and name. */
@@ -46,19 +47,27 @@ export function onePerPlace(resolved) {
  * @param {Stay[]} args.stays
  * @param {(lat: number, lon: number) => ({osmTag: string, placeName: string}|null)} args.resolve
  * @param {number} args.steps
- * @param {string} [args.weather]
+ * @param {import('./conditions.js').Reading|((stay: Stay) => import('./conditions.js').Reading)}
+ *   [args.weather] one reading for the whole day, or a function of the stay.
+ *   The function form matters because sun altitude differs between a morning
+ *   and an evening stay on the same day.
  * @returns {Catch[]}
  */
-export function collectDay({ rng, stays, resolve, steps, weather = 'unknown' }) {
+export function collectDay({ rng, stays, resolve, steps, weather = NO_READING }) {
   const resolved = [];
   for (const stay of stays) {
     const place = resolve(stay.lat, stay.lon);
     if (place) resolved.push({ stay, place });
   }
 
+  const readingFor =
+    typeof weather === 'function' ? weather : () => weather;
+
   const catches = [];
   for (const { stay, place } of onePerPlace(resolved)) {
-    const c = spawn(rng, stay, place.osmTag, place.placeName, steps, weather);
+    const c = spawn(
+      rng, stay, place.osmTag, place.placeName, steps, readingFor(stay),
+    );
     if (c) catches.push(c);
   }
   return catches;

@@ -9,6 +9,7 @@
  */
 
 import { STAT_CAP, STAT_NAMES } from './spawner.js';
+import { summarize } from './conditions.js';
 import { BY_ID } from './species.js';
 import { signatureFor } from './types.js';
 
@@ -80,7 +81,10 @@ export function card(c) {
     rule('├', '┤'),
     row(`  Total ${c.total}`),
     row(`  ${c.placeName}`),
-    row(`  ${clock(c.caughtAt)} · stayed ${mins} min · ${c.weather}`),
+    row(`  ${clock(c.caughtAt)} · stayed ${mins} min`),
+    // Conditions get their own line: at 46 columns the summary does not fit
+    // beside the time, and truncating it loses the daylight band on the end.
+    row(`  ${summarize(c.weather)}`),
     rule('├', '┤'),
   );
   for (const chunk of wrap(sp.blurb, INNER - 4)) lines.push(row(`  ${chunk}`));

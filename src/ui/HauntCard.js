@@ -7,12 +7,22 @@
 
 import { StyleSheet, Text, View } from 'react-native';
 
+import { summarize } from '../../prototype/src/conditions.js';
 import { BY_ID } from '../../prototype/src/species.js';
 import { STAT_CAP, STAT_NAMES } from '../../prototype/src/spawner.js';
 import { SIGNATURE_STAT } from '../../prototype/src/types.js';
 import { C, RARITY_COLOR, TYPE_COLOR } from './theme.js';
 
 const minutes = (seconds) => `${Math.round(seconds / 60)} min`;
+
+/**
+ * Catches from before weather measurement kept a free-text string; newer ones
+ * carry a reading. Prefer the reading, fall back to whatever was stored.
+ */
+function conditions(item) {
+  const said = summarize(item.weather);
+  return said === 'unknown' ? (item.weatherText ?? 'unknown') : said;
+}
 
 function Stat({ name, value, colour }) {
   return (
@@ -50,6 +60,8 @@ export default function HauntCard({ item }) {
         <Text style={{ color: typeColour }}>{species.type}</Text>
       </Text>
 
+      <Text style={s.conditions}>{conditions(item)}</Text>
+
       <View style={s.stats}>
         {STAT_NAMES.map((name) => (
           <Stat
@@ -79,6 +91,7 @@ const s = StyleSheet.create({
   rarity: { fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', marginLeft: 8 },
   blurb: { color: C.dim, fontSize: 13, fontStyle: 'italic', marginTop: 6 },
   where: { color: C.dim, fontSize: 12, marginTop: 10 },
+  conditions: { color: C.dim, fontSize: 12, marginTop: 2, opacity: 0.75 },
   stats: { marginTop: 12 },
   statRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   statName: { color: C.dim, fontSize: 11, width: 62 },

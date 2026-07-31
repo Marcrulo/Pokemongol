@@ -26,7 +26,16 @@ CREATE TABLE IF NOT EXISTS catches (
     osm_tag       TEXT    NOT NULL,
     caught_at     INTEGER NOT NULL,
     dwell_seconds INTEGER NOT NULL,
-    weather       TEXT    NOT NULL
+    weather       TEXT    NOT NULL,
+    -- The conditions when it attached. Recorded, not yet acted on; see
+    -- docs/superpowers/specs/2026-07-31-weather-measurement-design.md.
+    -- Nullable throughout: sun_altitude always resolves, the other three are
+    -- null when the reading could not be fetched.
+    temp_c         REAL,
+    precip_mm      REAL,
+    cloud_pct      REAL,
+    sun_altitude   REAL,
+    weather_source TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_catches_day ON catches(day);
 CREATE INDEX IF NOT EXISTS idx_catches_species ON catches(species_id);

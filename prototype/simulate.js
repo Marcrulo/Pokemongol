@@ -16,6 +16,7 @@ import { GPS_INTERVAL_SECONDS, distanceM, findStays } from './src/dwell.js';
 import { clock, review } from './src/render.js';
 import { makeRng } from './src/rng.js';
 import { MemoryStore } from './src/store.js';
+import { sunAltitude } from './src/sun.js';
 
 const WALK_SPEED_MS = 1.4;   // metres per second, unhurried
 const JITTER_DEG = 0.00012;  // ~13 m of GPS noise
@@ -101,9 +102,17 @@ export function resolve(lat, lon, itinerary) {
   return best;
 }
 
+/** A local-time instant from an ISO day plus seconds past midnight. */
+function atLocalTime(day, secondsPastMidnight) {
+  const at = new Date(`${day}T00:00:00`);
+  at.setSeconds(at.getSeconds() + secondsPastMidnight);
+  return at;
+}
+
 function parseArgs(argv) {
   const opts = {
-    seed: 42, steps: 12_400, weather: 'overcast, 17C',
+    seed: 42, steps: 12_400,
+    tempC: 17, cloudPct: 90, precipMm: 0,
     day: '2026-07-30', verbose: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -111,7 +120,9 @@ function parseArgs(argv) {
     if (a === '--verbose') opts.verbose = true;
     else if (a === '--seed') opts.seed = Number(argv[++i]);
     else if (a === '--steps') opts.steps = Number(argv[++i]);
-    else if (a === '--weather') opts.weather = argv[++i];
+    else if (a === '--temp') opts.tempC = Number(argv[++i]);
+    else if (a === '--cloud') opts.cloudPct = Number(argv[++i]);
+    else if (a === '--rain') opts.precipMm = Number(argv[++i]);
     else if (a === '--day') opts.day = argv[++i];
   }
   return opts;
@@ -144,7 +155,19 @@ function main() {
     stays,
     resolve: (lat, lon) => resolve(lat, lon, ITINERARY),
     steps: opts.steps,
-    weather: opts.weather,
+    // Per stay, so a morning catch and an evening one differ in daylight the
+    // way they do on the phone. Temperature, cloud and rain are held flat
+    // here; the app fetches them per hour.
+    weather: (stay) => ({
+      tempC: opts.tempC,
+      cloudPct: opts.cloudPct,
+      precipMm: opts.precipMm,
+      sunAltitude: sunAltitude(
+        stay.lat, stay.lon,
+        atLocalTime(opts.day, (stay.startT + stay.endT) / 2),
+      ),
+      source: 'open-meteo',
+    }),
   });
 
   const store = new MemoryStore();
