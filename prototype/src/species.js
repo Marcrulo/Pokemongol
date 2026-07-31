@@ -156,6 +156,8 @@ const RAW = [
     blurb: 'Six of them. One room. Ninety years. No resolution.' },
   { id: 'good_sandwiches', name: 'The Good Sandwiches', osmTag: 'amenity=funeral_hall',
     blurb: 'Nobody expected the sandwiches to be this good. It is quietly proud.' },
+  { id: 'plot_bought_early', name: 'The Plot Bought Early', osmTag: 'cemetery=grave',
+    blurb: 'Paid for in 1974 by someone being sensible. Still waiting.' },
 ];
 
 /** @type {readonly Species[]} */
