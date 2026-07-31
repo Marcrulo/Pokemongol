@@ -260,8 +260,10 @@ that needs fixing before `create-expo-app`.
 
 ## Deferred
 
-- **Weather** is recorded on every catch but does not yet affect rolls. Left as
-  an explicit hook — deepening weather's influence is the next design pass.
+- **Weather** is recorded on every catch but does not yet affect rolls. The
+  measurement layer is specified in
+  [2026-07-31-weather-measurement-design.md](2026-07-31-weather-measurement-design.md);
+  what conditions *do* to a haunt is deliberately left until there is real data.
 - **Illustration.** Cards are typographic for now; species carry an art slot
   that can be filled without touching anything else.
 - **Location catalog expansion** beyond 30, which is pure data entry.
