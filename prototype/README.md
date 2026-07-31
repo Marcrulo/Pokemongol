@@ -11,7 +11,10 @@ Design: [`../docs/superpowers/specs/2026-07-30-haunts-design.md`](../docs/superp
 ```sh
 node simulate.js              # simulate a day, print the evening review
 node simulate.js --verbose    # also show the GPS trail and which stays qualified
-node --test "test/**/*.test.js"   # 59 tests
+node --test "test/**/*.test.js"   # 104 tests
+node catalog.js               # the species catalogue, grouped
+node catalog.js --csv         # the same, for a spreadsheet
+node catalog.js --gaps        # tags that classify but yield nothing
 ```
 
 Flags: `--seed N`, `--steps N`, `--weather "..."`, `--day YYYY-MM-DD`.
