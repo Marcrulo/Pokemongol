@@ -58,7 +58,7 @@ yield nothing — the argument for which haunt to write next.
 ## Tests
 
 ```sh
-npm test        # 59 tests
+npm test        # 106 tests
 ```
 
 Node 22 will not resolve `node --test test/`; the glob is required and the
