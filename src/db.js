@@ -12,6 +12,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import { summarize } from '../prototype/src/conditions.js';
+import { GPS_INTERVAL_SECONDS } from '../prototype/src/dwell.js';
 import { mayReplaceDay } from '../prototype/src/day.js';
 import { SCHEMA } from '../prototype/src/store.js';
 
@@ -133,9 +134,26 @@ export function dayOf(date = new Date()) {
 
 const FIX_RETENTION_DAYS = 7;
 
+/**
+ * Android treats `timeInterval` as a floor it feels free to beat, and delivers
+ * in bursts — measured at roughly one fix every 7 seconds against the 30 we
+ * asked for. Four times the writes, four times the battery, and no more
+ * information, since the dwell rule only needs 30-second granularity.
+ *
+ * Throttling here rather than in the tracker keeps it true for every caller,
+ * and the slack absorbs jitter so a fix arriving at 29s is still kept.
+ */
+const MIN_FIX_SPACING_SECONDS = GPS_INTERVAL_SECONDS - 5;
+
 export async function recordFix({ t, lat, lon, accuracy = null }) {
   const d = await db();
   const recordedAt = Math.floor(Date.now() / 1000);
+
+  const last = await d.getFirstAsync('SELECT MAX(recorded_at) AS at FROM fixes');
+  if (last?.at != null && recordedAt - last.at < MIN_FIX_SPACING_SECONDS) {
+    return false;
+  }
+
   await d.runAsync(
     `INSERT INTO fixes (recorded_at, t, day, lat, lon, accuracy_m)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -143,6 +161,7 @@ export async function recordFix({ t, lat, lon, accuracy = null }) {
   );
   const cutoff = recordedAt - FIX_RETENTION_DAYS * 86400;
   await d.runAsync('DELETE FROM fixes WHERE recorded_at < ?', [cutoff]);
+  return true;
 }
 
 /** Trail for one day, in the shape `findStays` wants: t is seconds past midnight. */

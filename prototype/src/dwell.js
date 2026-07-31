@@ -25,6 +25,22 @@ export const GPS_INTERVAL_SECONDS = 30;
 export const MIN_DWELL_SECONDS = 300; // 5 minutes
 /** Absorbs GPS jitter without merging adjacent shops. */
 export const CLUSTER_RADIUS_M = 50;
+
+/**
+ * How long the trail may go quiet before a cluster is closed.
+ *
+ * Silence is missing evidence, not proof you stayed. Android delivers
+ * locations in bursts and then not at all for minutes at a time, and without
+ * this a fix at 22:55 and another at 23:12 from the same desk read as one
+ * continuous nineteen-minute visit — seventeen minutes of which nobody
+ * observed. That inflates dwell times and hands out haunts for time you may
+ * not have spent there.
+ *
+ * Four missed intervals is the threshold: generous enough to ride out a
+ * dropped fix or a brief tunnel, tight enough that a real absence breaks the
+ * stay.
+ */
+export const MAX_GAP_SECONDS = 4 * GPS_INTERVAL_SECONDS;
 const EARTH_RADIUS_M = 6_371_000;
 
 const toRad = (d) => (d * Math.PI) / 180;
@@ -52,18 +68,23 @@ export function distanceM(aLat, aLon, bLat, bLon) {
  * cluster grows — that would let a slow walk drift indefinitely and register as
  * a stay.
  *
+ * A cluster also ends when the trail goes quiet for longer than `maxGapS`,
+ * because an unobserved stretch is not evidence of presence.
+ *
  * Duration is measured first fix to last, so at a 30-second cadence a 5-minute
  * stay needs 11 fixes, not 10.
  *
  * @param {Fix[]} trail
  * @param {number} [radiusM]
  * @param {number} [minDwellS]
+ * @param {number} [maxGapS]
  * @returns {Stay[]}
  */
 export function findStays(
   trail,
   radiusM = CLUSTER_RADIUS_M,
   minDwellS = MIN_DWELL_SECONDS,
+  maxGapS = MAX_GAP_SECONDS,
 ) {
   if (!trail || trail.length === 0) return [];
 
@@ -89,7 +110,11 @@ export function findStays(
 
   for (const fix of sorted.slice(1)) {
     const anchor = cluster[0];
-    if (distanceM(anchor.lat, anchor.lon, fix.lat, fix.lon) <= radiusM) {
+    const previous = cluster[cluster.length - 1];
+    const nearby = distanceM(anchor.lat, anchor.lon, fix.lat, fix.lon) <= radiusM;
+    const continuous = fix.t - previous.t <= maxGapS;
+
+    if (nearby && continuous) {
       cluster.push(fix);
     } else {
       closeCluster();
