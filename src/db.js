@@ -13,14 +13,29 @@ import * as SQLite from 'expo-sqlite';
 
 import { SCHEMA } from '../prototype/src/store.js';
 
+/**
+ * `recorded_at` is when we sampled; `t` is what the provider stamped on the
+ * location. They differ when Android replays a cached fix, which it does
+ * freely while you stand still.
+ *
+ * The trail is keyed on `recorded_at`, because the honest claim is "at 22:30
+ * the best known position was here" — not "we heard about 21:37 again". An
+ * earlier version made `t` the primary key and used INSERT OR REPLACE, so
+ * every replayed fix silently overwrote one existing row and the trail stopped
+ * growing while the task ran perfectly.
+ */
 const EXTRA_SCHEMA = `
 CREATE TABLE IF NOT EXISTS fixes (
-    t   INTEGER PRIMARY KEY,
-    day TEXT NOT NULL,
-    lat REAL NOT NULL,
-    lon REAL NOT NULL
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at INTEGER NOT NULL,
+    t           INTEGER NOT NULL,
+    day         TEXT    NOT NULL,
+    lat         REAL    NOT NULL,
+    lon         REAL    NOT NULL,
+    accuracy_m  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_fixes_day ON fixes(day);
+CREATE INDEX IF NOT EXISTS idx_fixes_recorded ON fixes(recorded_at);
 
 CREATE TABLE IF NOT EXISTS places (
     cell       TEXT PRIMARY KEY,
@@ -29,6 +44,23 @@ CREATE TABLE IF NOT EXISTS places (
     fetched_at INTEGER NOT NULL
 );
 `;
+
+const SCHEMA_VERSION = 1;
+
+/**
+ * The trail is a seven-day scratch buffer, so version 1 simply drops it rather
+ * than migrating rows into the new shape. Catches are never touched — those are
+ * the only rows that matter.
+ *
+ * @param {SQLite.SQLiteDatabase} d
+ */
+async function migrate(d) {
+  const row = await d.getFirstAsync('PRAGMA user_version');
+  const version = row?.user_version ?? 0;
+  if (version >= SCHEMA_VERSION) return;
+  await d.execAsync('DROP TABLE IF EXISTS fixes');
+  await d.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+}
 
 /** @type {Promise<SQLite.SQLiteDatabase>|null} */
 let handle = null;
@@ -39,6 +71,7 @@ export function db() {
     handle = (async () => {
       const d = await SQLite.openDatabaseAsync('haunts.db');
       await d.execAsync('PRAGMA journal_mode = WAL;');
+      await migrate(d);
       await d.execAsync(SCHEMA);
       await d.execAsync(EXTRA_SCHEMA);
       return d;
@@ -55,22 +88,23 @@ export function dayOf(date = new Date()) {
 
 const FIX_RETENTION_DAYS = 7;
 
-export async function recordFix({ t, lat, lon }) {
+export async function recordFix({ t, lat, lon, accuracy = null }) {
   const d = await db();
-  const at = new Date(t * 1000);
+  const recordedAt = Math.floor(Date.now() / 1000);
   await d.runAsync(
-    'INSERT OR REPLACE INTO fixes (t, day, lat, lon) VALUES (?, ?, ?, ?)',
-    [t, dayOf(at), lat, lon],
+    `INSERT INTO fixes (recorded_at, t, day, lat, lon, accuracy_m)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [recordedAt, t, dayOf(new Date(recordedAt * 1000)), lat, lon, accuracy],
   );
-  const cutoff = t - FIX_RETENTION_DAYS * 86400;
-  await d.runAsync('DELETE FROM fixes WHERE t < ?', [cutoff]);
+  const cutoff = recordedAt - FIX_RETENTION_DAYS * 86400;
+  await d.runAsync('DELETE FROM fixes WHERE recorded_at < ?', [cutoff]);
 }
 
 /** Trail for one day, in the shape `findStays` wants: t is seconds past midnight. */
 export async function trailForDay(day) {
   const d = await db();
   const rows = await d.getAllAsync(
-    'SELECT t, lat, lon FROM fixes WHERE day = ? ORDER BY t',
+    'SELECT recorded_at AS t, lat, lon FROM fixes WHERE day = ? ORDER BY recorded_at',
     [day],
   );
   if (rows.length === 0) return [];

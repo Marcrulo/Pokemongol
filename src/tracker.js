@@ -18,12 +18,28 @@ import { recordFix } from './db.js';
 export const TASK = 'haunts-location';
 
 TaskManager.defineTask(TASK, async ({ data, error }) => {
-  if (error || !data?.locations) return;
+  if (error) {
+    console.log('[haunts] task error', error);
+    return;
+  }
+  if (!data?.locations) {
+    console.log('[haunts] task fired with no locations');
+    return;
+  }
   for (const loc of data.locations) {
+    // Temporary instrumentation: is the provider handing back stale, cached
+    // fixes? Age and accuracy answer that; remove once the trail is trusted.
+    const age = Math.round((Date.now() - loc.timestamp) / 1000);
+    console.log(
+      `[haunts] fix ${new Date(loc.timestamp).toISOString()} age=${age}s ` +
+        `acc=${loc.coords.accuracy?.toFixed(0)}m ` +
+        `${loc.coords.latitude.toFixed(6)},${loc.coords.longitude.toFixed(6)}`,
+    );
     await recordFix({
       t: Math.floor(loc.timestamp / 1000),
       lat: loc.coords.latitude,
       lon: loc.coords.longitude,
+      accuracy: loc.coords.accuracy ?? null,
     });
   }
 });
@@ -52,7 +68,10 @@ export async function startTracking() {
   if (!perm.ok) return perm;
 
   await Location.startLocationUpdatesAsync(TASK, {
-    accuracy: Location.Accuracy.Balanced,
+    // Balanced targets ~100 m, which Android satisfies from Wi-Fi and cell
+    // towers without waking the GPS chip. The dwell detector clusters at 50 m,
+    // so 100 m cannot resolve the thing the game is built on.
+    accuracy: Location.Accuracy.High,
     timeInterval: GPS_INTERVAL_SECONDS * 1000,
     distanceInterval: 0,
     pausesUpdatesAutomatically: false,
