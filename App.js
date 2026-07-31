@@ -21,7 +21,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CATALOG } from './prototype/src/species.js';
 import { collect } from './src/collect.js';
-import { bestPerSpecies, catchesForDay, dayOf } from './src/db.js';
+import { bestPerSpecies, catchesForDay, clearDay, dayOf } from './src/db.js';
+import {
+  DEV_DWELL_SECONDS,
+  IS_DEV,
+  devFlags,
+  setDevFlag,
+} from './src/dev.js';
 import { isTracking, startTracking, stopTracking } from './src/tracker.js';
 import HauntCard from './src/ui/HauntCard.js';
 import { C } from './src/ui/theme.js';
@@ -35,6 +41,7 @@ export default function App() {
   const [today, setToday] = useState([]);
   const [collection, setCollection] = useState([]);
   const [note, setNote] = useState('');
+  const [flags, setFlags] = useState(devFlags());
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -84,6 +91,18 @@ export default function App() {
     setTracking(true);
   };
 
+  const toggleFlag = async (name) => {
+    setDevFlag(name, !flags[name]);
+    setFlags(devFlags());
+    await refresh();
+  };
+
+  /** Wipe today and collect it again — the guard in replaceDay won't. */
+  const recatch = async () => {
+    await clearDay(dayOf());
+    await refresh();
+  };
+
   const items = tab === 'Today' ? today : collection;
   const empty =
     tab === 'Today'
@@ -117,6 +136,24 @@ export default function App() {
           </Pressable>
         ))}
       </View>
+
+      {IS_DEV && tab === 'Today' ? (
+        <View style={s.devRow}>
+          <Pressable onPress={() => toggleFlag('shortDwell')} style={s.devChip}>
+            <Text style={s.devText}>
+              dwell {flags.shortDwell ? `${DEV_DWELL_SECONDS}s` : '5 min'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => toggleFlag('repeatPlaces')} style={s.devChip}>
+            <Text style={s.devText}>
+              repeats {flags.repeatPlaces ? 'on' : 'off'}
+            </Text>
+          </Pressable>
+          <Pressable onPress={recatch} style={s.devChip}>
+            <Text style={s.devText}>re-catch</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {note !== '' && tab === 'Today' ? <Text style={s.note}>{note}</Text> : null}
 
@@ -159,6 +196,15 @@ const s = StyleSheet.create({
   tabText: { color: C.dim, fontSize: 15 },
   tabTextOn: { color: C.text, fontWeight: '600' },
   note: { color: C.dim, fontSize: 12, paddingHorizontal: 20, paddingBottom: 6 },
+  devRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 8 },
+  devChip: {
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  devText: { color: C.dim, fontSize: 11 },
   list: { padding: 20, paddingTop: 6, flexGrow: 1 },
   empty: { color: C.dim, textAlign: 'center', marginTop: 60, lineHeight: 22 },
 });

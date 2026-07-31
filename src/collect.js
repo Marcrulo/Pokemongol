@@ -10,11 +10,12 @@
 
 import { NO_READING } from '../prototype/src/conditions.js';
 import { onePerPlace } from '../prototype/src/day.js';
-import { distanceM, findStays } from '../prototype/src/dwell.js';
+import { CLUSTER_RADIUS_M, distanceM, findStays } from '../prototype/src/dwell.js';
 import { makeRng, seedFrom } from '../prototype/src/rng.js';
 import { spawn } from '../prototype/src/spawner.js';
 import { sunAltitude } from '../prototype/src/sun.js';
 import { dayOf, replaceDay, trailForDay } from './db.js';
+import { allowRepeatPlaces, dwellThreshold } from './dev.js';
 import { resolvePlace } from './resolve.js';
 import { hourlyForDay, readHour } from './weather.js';
 
@@ -51,7 +52,7 @@ export function stepsFromTrail(trail) {
  */
 export async function collect(day) {
   const trail = await trailForDay(day);
-  const stays = findStays(trail);
+  const stays = findStays(trail, CLUSTER_RADIUS_M, dwellThreshold());
   const steps = stepsFromTrail(trail);
 
   const resolved = [];
@@ -67,7 +68,9 @@ export async function collect(day) {
     if (place) resolved.push({ stay, place });
   }
 
-  const keep = onePerPlace(resolved);
+  // In development every stay may spawn, so sitting at one desk still produces
+  // something on each attempt. The real rule keeps one haunt per place per day.
+  const keep = allowRepeatPlaces() ? resolved : onePerPlace(resolved);
 
   // One request for the whole day, anchored on the first place you lingered.
   // Failure is not fatal: sun altitude still resolves and the rest records as
@@ -85,7 +88,14 @@ export async function collect(day) {
 
   const catches = [];
   for (const { stay, place } of keep) {
-    const rng = makeRng(seedFrom(day, place.osmTag, place.placeName));
+    // Place-only seeding keeps a catch stable across re-collection. When
+    // repeats are allowed the stay's start has to join the seed, or two visits
+    // to one desk would roll the identical haunt twice.
+    const rng = makeRng(
+      allowRepeatPlaces()
+        ? seedFrom(day, place.osmTag, place.placeName, stay.startT)
+        : seedFrom(day, place.osmTag, place.placeName),
+    );
     const c = spawn(
       rng, stay, place.osmTag, place.placeName, steps,
       readingFor(day, stay, hourly),

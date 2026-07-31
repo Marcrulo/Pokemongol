@@ -213,6 +213,17 @@ export async function replaceDay(day, catches) {
   return true;
 }
 
+/**
+ * Throw away a day's catches so it can be collected again.
+ *
+ * Development only — the normal `replaceDay` guard deliberately refuses to
+ * delete, so re-catching at one desk needs an explicit way to say "yes, really".
+ */
+export async function clearDay(day) {
+  const d = await db();
+  await d.runAsync('DELETE FROM catches WHERE day = ?', [day]);
+}
+
 const hydrate = (r) => ({
   id: r.id,
   day: r.day,
