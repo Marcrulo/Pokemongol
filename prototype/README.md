@@ -14,6 +14,7 @@ node simulate.js --verbose    # also show the GPS trail and which stays qualifie
 node --test "test/**/*.test.js"   # 104 tests
 node catalog.js               # the species catalogue, grouped
 node catalog.js --csv         # the same, for a spreadsheet
+node catalog.js --md          # one markdown table, every haunt
 node catalog.js --gaps        # tags that classify but yield nothing
 ```
 

@@ -7,6 +7,7 @@
  *
  *   node catalog.js            grouped table, for reading
  *   node catalog.js --csv      csv, for a spreadsheet
+ *   node catalog.js --md       one markdown table, every haunt
  *   node catalog.js --gaps     tags that map to a type but have no species
  */
 
@@ -47,6 +48,24 @@ function asTable() {
   return out.join('\n');
 }
 
+/** One row per haunt, sorted by type then name. */
+function asMarkdown() {
+  const order = new Map(TYPES.map((t, i) => [t, i]));
+  const rows = [...CATALOG].sort(
+    (a, b) => order.get(a.type) - order.get(b.type) || a.name.localeCompare(b.name),
+  );
+  const out = [
+    '| # | Haunt | Type | Signature | Found at | Blurb |',
+    '|---|---|---|---|---|---|',
+  ];
+  rows.forEach((s, i) => {
+    out.push(
+      `| ${i + 1} | **${s.name}** | ${s.type} | ${SIGNATURE_STAT[s.type]} | \`${s.osmTag}\` | ${s.blurb} |`,
+    );
+  });
+  return out.join('\n');
+}
+
 /** Tags that classify correctly and then yield nothing. */
 function asGaps() {
   const have = new Set(CATALOG.map((s) => s.osmTag));
@@ -61,4 +80,6 @@ function asGaps() {
 }
 
 const arg = process.argv[2];
-console.log(arg === '--csv' ? asCsv() : arg === '--gaps' ? asGaps() : asTable());
+const render =
+  { '--csv': asCsv, '--md': asMarkdown, '--gaps': asGaps }[arg] ?? asTable;
+console.log(render());
