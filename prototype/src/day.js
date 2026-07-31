@@ -39,6 +39,26 @@ export function onePerPlace(resolved) {
 }
 
 /**
+ * Whether a recomputed day may overwrite what is already stored.
+ *
+ * Replacement is only sound while the trail that produced the stored catches
+ * still exists. It does not always: the trail is pruned after a week, and a
+ * migration once dropped it outright. A day then recomputes to zero catches
+ * because the evidence is gone, not because nothing happened.
+ *
+ * So an empty recomputation never deletes a non-empty day. Catches are the one
+ * thing here that walking again cannot regenerate.
+ *
+ * @param {number} recomputed  how many catches this run produced
+ * @param {number} stored      how many are already saved for that day
+ * @returns {boolean}
+ */
+export function mayReplaceDay(recomputed, stored) {
+  if (recomputed > 0) return true;
+  return stored === 0;
+}
+
+/**
  * The full daily pipeline: resolve each stay to a place, apply one-per-place,
  * then spawn.
  *
