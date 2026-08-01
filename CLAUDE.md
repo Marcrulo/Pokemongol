@@ -55,10 +55,44 @@ Without that the hook silently does nothing. A test in
 `node prototype/catalog.js --gaps` lists tags that classify correctly and still
 yield nothing — the argument for which haunt to write next.
 
+## Sprites
+
+Artwork is optional per species. `sprites/` holds raw art; `assets/sprites/`
+holds what the app bundles, and is **generated**:
+
+```sh
+python3 tools/prep-sprites.py       # sprites/ -> assets/sprites/
+```
+
+Then rename the output to the species id and **name it in `src/ui/sprites.js`**
+— Metro resolves `require` from a literal path at build time, so there is no
+looking a sprite up by id at runtime. Adding the file without the registry line
+does nothing. Anything unlisted draws the monogram placeholder in
+`HauntSprite.js`, so a half-illustrated catalogue still renders.
+
+Do not skip the prep step. It trims to the alpha bounding box and resamples to
+twice the display width, and both matter:
+
+- **Trimming sets the subject's size.** Source art centres the figure in
+  whatever margin the drawing needed. Across the first seven examples the
+  figure filled between 6% and 27% of its canvas — a 2.7× difference in how big
+  the haunt looks on a card.
+- **Resampling keeps pixel art crisp.** React Native has no nearest-neighbour
+  hint, so the resize happens in Pillow and the device is left an exact 2:1
+  reduction.
+
+The prep script needs Python with Pillow, which the Node toolchain above does
+not cover. It is asset prep, not part of the app build.
+
+Art is drawn `contain` into a 146pt column at its own aspect ratio, floating on
+a type-coloured aura — the sprites are transparent cut-outs, and trimmed they
+run wider than they are tall, so a portrait crop would cut the sides off.
+Adding a PNG is a JavaScript change, not a native one — no rebuild.
+
 ## Tests
 
 ```sh
-npm test        # 106 tests
+npm test        # 102 tests
 ```
 
 Node 22 will not resolve `node --test test/`; the glob is required and the
@@ -118,6 +152,12 @@ test fails, do not widen the bounds — something changed the distribution.
 
 `CLUSTER_RADIUS_M = 50` absorbs GPS jitter without merging adjacent shops. Any
 location accuracy setting coarser than that cannot resolve it.
+
+The A–E cutoffs in `prototype/src/grade.js` are the same kind of constant:
+measured over 30,000 rolls, not picked. Even bands of twenty would grade nearly
+every haunt `EEEEB`, because rarity fixes the points budget and the signature
+share takes a third of it off the top. A test pins the resulting share of each
+letter; if it fails, the roll distribution moved.
 
 ## Do not run
 

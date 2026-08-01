@@ -15,7 +15,6 @@ import { summarize } from '../prototype/src/conditions.js';
 import { GPS_INTERVAL_SECONDS } from '../prototype/src/dwell.js';
 import { mayReplaceDay } from '../prototype/src/day.js';
 import { SCHEMA } from '../prototype/src/store.js';
-import { verdictFor } from '../prototype/src/verdict.js';
 
 /**
  * `recorded_at` is when we sampled; `t` is what the provider stamped on the
@@ -244,59 +243,6 @@ export async function replaceDay(day, catches) {
     }
   });
   return true;
-}
-
-/**
- * Each of a day's catches judged against every earlier catch of its species.
- *
- * Ordering is by `(day, caught_at)` and **never by id**: `replaceDay` deletes
- * and re-inserts a whole day, so a re-collected Tuesday would get fresh ids
- * and appear to have happened after Wednesday — silently beating records it
- * predates.
- *
- * @param {string} day
- * @returns {Promise<Record<number, import('../prototype/src/verdict.js').Verdict>>}
- *   keyed by catch id
- */
-export async function verdictsForDay(day) {
-  const d = await db();
-  const rows = await d.getAllAsync(
-    `SELECT c.* FROM catches c
-     WHERE c.species_id IN (SELECT species_id FROM catches WHERE day = ?)
-     ORDER BY c.day, c.caught_at, c.id`,
-    [day],
-  );
-
-  /** @type {Map<string, {count: number, bestTotal: number|null, worstTotal: number|null, bestByStat: Record<string, number>}>} */
-  const running = new Map();
-  const out = {};
-
-  for (const row of rows) {
-    const key = row.species_id;
-    const history = running.get(key) ?? {
-      count: 0,
-      bestTotal: null,
-      worstTotal: null,
-      bestByStat: {},
-    };
-
-    if (row.day === day) {
-      const c = { total: row.total, stats: JSON.parse(row.stats_json) };
-      out[row.id] = verdictFor(c, history);
-    }
-
-    // Fold this catch into the record before moving on to the next.
-    const stats = JSON.parse(row.stats_json);
-    history.count += 1;
-    history.bestTotal = Math.max(history.bestTotal ?? -Infinity, row.total);
-    history.worstTotal = Math.min(history.worstTotal ?? Infinity, row.total);
-    for (const [name, value] of Object.entries(stats)) {
-      history.bestByStat[name] = Math.max(history.bestByStat[name] ?? -Infinity, value);
-    }
-    running.set(key, history);
-  }
-
-  return out;
 }
 
 /**

@@ -10,6 +10,7 @@
 
 import { STAT_CAP, STAT_NAMES } from './spawner.js';
 import { summarize } from './conditions.js';
+import { gradeFor } from './grade.js';
 import { BY_ID } from './species.js';
 import { signatureFor } from './types.js';
 
@@ -75,7 +76,12 @@ export function card(c) {
   for (const name of STAT_NAMES) {
     const v = c.stats[name];
     const mark = name === signature ? '▸' : ' ';
-    lines.push(row(`${mark} ${name.padEnd(LABEL_W)} ${bar(v)} ${String(v).padStart(3)}`));
+    // The letter is what the app puts on the card, so it goes here too — this
+    // renderer exists to check the reveal reads well, and it cannot do that
+    // while showing a different scale from the thing being checked.
+    lines.push(row(
+      `${mark} ${name.padEnd(LABEL_W)} ${bar(v)} ${String(v).padStart(3)} ${gradeFor(v)}`,
+    ));
   }
   lines.push(
     rule('├', '┤'),

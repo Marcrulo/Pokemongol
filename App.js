@@ -27,7 +27,6 @@ import {
   clearDay,
   dayOf,
   lastFixAt,
-  verdictsForDay,
 } from './src/db.js';
 import {
   DEV_DWELL_SECONDS,
@@ -56,7 +55,6 @@ export default function App() {
   const [collection, setCollection] = useState([]);
   const [note, setNote] = useState('');
   const [flags, setFlags] = useState(devFlags());
-  const [verdicts, setVerdicts] = useState({});
   const [permission, setPermission] = useState('ready');
   const [lastFix, setLastFix] = useState(null);
   const [dayShape, setDayShape] = useState({ stays: 0, steps: 0, emptyPlaces: 0 });
@@ -87,7 +85,6 @@ export default function App() {
       setNote(`Could not collect: ${e.message}`);
     }
     setToday(await catchesForDay(day));
-    setVerdicts(await verdictsForDay(day));
     setCollection(await bestPerSpecies());
     setTracking(await isTracking());
     setPermission(await permissionState());
@@ -220,10 +217,7 @@ export default function App() {
             ) : item.kind === 'caught' ? (
               <HauntCard item={item.data} />
             ) : (
-              // Verdicts belong to the reveal, not the collection: every card
-              // in Collection is by definition the best one, so the line would
-              // be noise on every row.
-              <HauntCard item={item} verdict={verdicts[item.id]} />
+              <HauntCard item={item} />
             )
           }
           contentContainerStyle={s.list}
